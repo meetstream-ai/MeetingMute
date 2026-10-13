@@ -1,15 +1,10 @@
 import AppKit
 import ApplicationServices
-import CoreAudio
+import MeetingMuteCore
 import Observation
 
-/// Mutes notetakers using the Accessibility API:
-/// - their macOS notification banners are closed whenever MeetingMute is on;
-/// - during a meeting, their popup windows are dismissed (via the popup's own dismiss or
-///   close button) or, failing that, parked off-screen until the meeting ends.
-///
-/// Safety rules: only apps the user muted are touched; allowed apps, meeting apps
-/// (Zoom, Teams, browsers…) and MeetingMute itself never are. Nothing is written to disk.
+/// Watches for meetings and drives `AXEngine`, which closes popups and banners from muted
+/// apps. Meeting apps, browsers, allowed apps and MeetingMute itself are never touched.
 @MainActor
 @Observable
 final class PromptSuppressor {
@@ -19,339 +14,250 @@ final class PromptSuppressor {
     }
 
     private(set) var state: State = .idle
+    /// What started the current meeting ("Zoom", "Chrome"…).
+    private(set) var meetingSource: String?
+    private(set) var meetingStart: Date?
+    private(set) var silencedThisMeeting = 0
     /// Polled, since the user grants it in System Settings.
     private(set) var hasAccessibility = AXIsProcessTrusted()
+    /// Let everything through until this meeting ends.
+    var pausedForMeeting = false {
+        didSet {
+            guard pausedForMeeting != oldValue, state == .inMeeting else { return }
+            prompts.record(pausedForMeeting ? "Paused for this meeting" : "Resumed")
+        }
+    }
+    /// Problems worth a bug report, shown in diagnostics.
+    private(set) var notes: [String] = []
 
     private let prompts: MeetingPromptsStore
-    private let catalog: AppCatalog
+    @ObservationIgnored private let engine = AXEngine()
     @ObservationIgnored private var timer: Timer?
-    /// Popups already dismissed this meeting, so each is logged once.
-    @ObservationIgnored private var handled: [AXUIElement] = []
-    @ObservationIgnored private var quietTicks = 0
-    @ObservationIgnored private var detectTicks = 0
-    /// Banners already closed (by AX identifier), so one still animating out isn't logged twice.
-    @ObservationIgnored private var closedBanners: [String] = []
-    /// Popups with no button to dismiss them, moved off-screen, with where they were. Apps
-    /// re-show their popups, so they're kept there all meeting and put back afterwards.
-    @ObservationIgnored private var parked: [(pid: pid_t, window: AXUIElement, origin: CGPoint)] = []
-    /// Apps whose web content (Electron) has been exposed to Accessibility.
-    @ObservationIgnored private var webAccessible: Set<pid_t> = []
+    @ObservationIgnored private var ticks = 0
+    @ObservationIgnored private var engineBusy = false
+    @ObservationIgnored private var firstSignal: Date?
+    @ObservationIgnored private var lastSignal: Date?
+    @ObservationIgnored private var lastInputs: [String] = []
+    /// The current meeting is in a browser tab.
+    @ObservationIgnored private var meetingIsBrowser = false
+    @ObservationIgnored private var titleCache: [String: (titles: [String], at: Date)] = [:]
+    @ObservationIgnored private var signalSources: [DispatchSourceSignal] = []
+    @ObservationIgnored private var notificationCenterPID: pid_t?
 
-    init(prompts: MeetingPromptsStore, catalog: AppCatalog) {
+    /// A call that goes quiet this long has ended. Native apps keep the microphone open while
+    /// muted, but browsers drop it, so this rides out a muted stretch.
+    static let meetingEndDelay: TimeInterval = 30
+
+    init(prompts: MeetingPromptsStore) {
         self.prompts = prompts
-        self.catalog = catalog
-        // Already in a meeting at launch: don't treat existing windows as new prompts.
-        if Self.meetingSignal().active { state = .inMeeting }
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
+        if Demo.isOn {
+            hasAccessibility = true
+            if Demo.inMeeting {
+                state = .inMeeting
+                meetingSource = "Zoom"
+                meetingStart = Date().addingTimeInterval(-754)
+                silencedThisMeeting = 4
+            }
+            return
         }
-        NotificationCenter.default.addObserver(
-            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.unpark { _ in true } }
+        AX.setGlobalTimeout(0.3)
+
+        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tick() }
         }
-    }
+        timer.tolerance = 0.15
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
 
-    // MARK: Meeting detection
-
-    /// A meeting is happening when Zoom's meeting helper runs, or a meeting app (Zoom, Teams,
-    /// Webex, FaceTime, Slack, Discord, a browser for Meet) is capturing the microphone.
-    /// Notetakers listening on their own don't count.
-    nonisolated static func meetingSignal() -> (active: Bool, source: String) {
-        if NSWorkspace.shared.runningApplications.contains(where: {
-            $0.executableURL?.lastPathComponent == "CptHost"
-        }) {
-            return (true, "Zoom meeting")
+        let engine = engine
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification,
+                                               object: nil, queue: .main) { _ in engine.restoreAllSync() }
+        // `pkill` and `kill` send SIGTERM, which skips willTerminate: put hidden popups back first.
+        for sig in [SIGTERM, SIGINT] {
+            signal(sig, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            source.setEventHandler {
+                engine.restoreAllSync()
+                exit(0)
+            }
+            source.resume()
+            signalSources.append(source)
         }
-        if let app = meetingAppUsingMicrophone() { return (true, "\(app) using the microphone") }
-        return (false, "")
-    }
-
-    /// Bundle-ID prefixes of meeting apps; helper processes (e.g. `com.google.Chrome.helper`) match too.
-    nonisolated private static let meetingPrefixes: [(prefix: String, name: String)] = MeetingApp.known
-        .flatMap { app in app.bundleIDs.map { ($0, app.name) } }
-        + [("com.apple.WebKit", "Safari"), ("com.apple.TelephonyUtilities", "FaceTime"),
-           ("com.apple.avconferenced", "FaceTime")]
-
-    /// The meeting app currently capturing audio input, if any.
-    nonisolated private static func meetingAppUsingMicrophone() -> String? {
-        for bundleID in inputProcessBundleIDs() {
-            if let match = meetingPrefixes.first(where: { bundleID.hasPrefix($0.prefix) }) { return match.name }
-        }
-        return nil
-    }
-
-    /// Bundle IDs of every process with audio input running.
-    nonisolated private static func inputProcessBundleIDs() -> [String] {
-        let system = AudioObjectID(kAudioObjectSystemObject)
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyProcessObjectList,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain)
-        var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(system, &address, 0, nil, &size) == noErr, size > 0 else { return [] }
-        var processes = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
-        guard AudioObjectGetPropertyData(system, &address, 0, nil, &size, &processes) == noErr else { return [] }
-
-        return processes.compactMap { process in
-            var running: UInt32 = 0
-            var length = UInt32(MemoryLayout<UInt32>.size)
-            address.mSelector = kAudioProcessPropertyIsRunningInput
-            guard AudioObjectGetPropertyData(process, &address, 0, nil, &length, &running) == noErr,
-                  running != 0 else { return nil }
-            var bundleID: Unmanaged<CFString>?
-            length = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-            address.mSelector = kAudioProcessPropertyBundleID
-            guard AudioObjectGetPropertyData(process, &address, 0, nil, &length, &bundleID) == noErr else { return nil }
-            return bundleID?.takeRetainedValue() as String?
-        }
+        if hasAccessibility { engine.recoverStranded(pids: recorderPIDs()) }
     }
 
     // MARK: Accessibility
 
-    /// Shows the system prompt, which offers to open System Settings.
+    /// Shows the system prompt the first time; after that, opens System Settings.
     func requestAccessibility() {
-        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        if !AXIsProcessTrustedWithOptions([key: true] as CFDictionary) {
-            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
-        }
+        let asked = UserDefaults.standard.bool(forKey: "askedForAccessibility")
+        UserDefaults.standard.set(true, forKey: "askedForAccessibility")
+        let trusted = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": !asked] as CFDictionary)
+        if !trusted, asked { openAccessibilitySettings() }
     }
 
-    private var mutedNames: String {
-        prompts.muted.map(\.displayName).formatted(.list(type: .and))
+    func openAccessibilitySettings() {
+        NSWorkspace.shared.open(URL(string:
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
     }
 
     // MARK: Loop
 
     private func tick() {
+        ticks += 1
         let trusted = AXIsProcessTrusted()
-        if trusted != hasAccessibility { hasAccessibility = trusted }
-        detectTicks += 1
-        if detectTicks % 10 == 0 { prompts.noteMicrophoneUsers(Self.inputProcessBundleIDs()) }
+        if trusted != hasAccessibility {
+            hasAccessibility = trusted
+            if trusted { engine.recoverStranded(pids: recorderPIDs()) }
+        }
+        // Once a second when idle, twice a second in a meeting.
+        if state == .inMeeting || ticks % 2 == 0 { detect() }
+        if ticks % 10 == 0, prompts.isEnabled { prompts.noteMicrophoneUsers(lastInputs) }
+        runEngine()
+    }
 
-        let signal = Self.meetingSignal()
+    private func detect() {
+        let inputs = AudioInput.recordingBundleIDs()
+        lastInputs = inputs
+        // Zoom's meeting helper only exists while Zoom runs.
+        let zoomMeeting = !NSRunningApplication.runningApplications(withBundleIdentifier: "us.zoom.xos").isEmpty
+            && NSWorkspace.shared.runningApplications.contains { $0.executableURL?.lastPathComponent == "CptHost" }
+        // Once a call has started in a browser, it lasts while the browser holds the microphone,
+        // even if the user switches to another tab.
+        let continuing = state == .inMeeting && meetingIsBrowser
+        let signal = MeetingDetection.evaluate(inputs: inputs, zoomMeetingRunning: zoomMeeting,
+                                               anyBrowserMicCounts: prompts.anyBrowserMicCounts || continuing,
+                                               browserTitles: browserTitles)
+        let now = Date()
         switch state {
         case .idle:
-            if signal.active { meetingStarted() }
+            guard let signal else { firstSignal = nil; return }
+            // About a second of signal, so a blip doesn't start a meeting.
+            if let first = firstSignal, now.timeIntervalSince(first) >= 0.9 {
+                meetingStarted(signal, at: now)
+            } else if firstSignal == nil {
+                firstSignal = now
+            }
         case .inMeeting:
-            // Require ~5s of silence so a brief mic gap doesn't count as a new meeting.
-            quietTicks = signal.active ? 0 : quietTicks + 1
-            if quietTicks >= 10 {
-                state = .idle
-                prompts.record("Meeting ended")
-                unpark { _ in true }
+            if let signal {
+                lastSignal = now
+                if meetingSource != signal.source { meetingSource = signal.source }
+                meetingIsBrowser = signal.isBrowser
+            } else if let last = lastSignal, now.timeIntervalSince(last) > Self.meetingEndDelay {
+                meetingEnded()
             }
-        }
-
-        if prompts.isEnabled, hasAccessibility {
-            if state == .inMeeting { dismissPopups() }
-            // Banners are closed any time: notetakers also notify before a call starts
-            // (calendar reminders) and after it ends.
-            closeNotificationBanners()
-        }
-        // Unmuted (or muting switched off): put its popups back right away.
-        if !parked.isEmpty {
-            let muted = Set(targets().map(\.processIdentifier))
-            unpark { !prompts.isEnabled || !muted.contains($0) }
         }
     }
 
-    private func meetingStarted() {
-        handled = []
-        quietTicks = 0
+    private func meetingStarted(_ signal: MeetingSignal, at now: Date) {
         state = .inMeeting
-        let message: String
-        if !prompts.isEnabled || prompts.muted.isEmpty {
-            message = "nothing muted"
-        } else if !hasAccessibility {
-            message = "can't mute without Accessibility"
-        } else {
-            message = "muting \(mutedNames)"
-        }
-        prompts.record("Meeting started · \(message)")
+        meetingSource = signal.source
+        meetingIsBrowser = signal.isBrowser
+        meetingStart = now
+        lastSignal = now
+        firstSignal = nil
+        silencedThisMeeting = 0
+        pausedForMeeting = false
+        let muted = prompts.muted
+        let detail = if !prompts.isEnabled { "MeetingMute is off" }
+            else if !hasAccessibility { "needs Accessibility to mute" }
+            else if muted.isEmpty { "nothing muted" }
+            else { "muting \(muted.map(\.displayName).formatted(.list(type: .and)))" }
+        prompts.record("Meeting started in \(signal.source) · \(detail)")
     }
 
-    // MARK: Dismissing
-
-    /// Running apps the user muted, excluding meeting apps and anything allowed.
-    private func targets() -> [NSRunningApplication] {
-        let protected = Set(MeetingApp.known.flatMap(\.bundleIDs))
-            .union(prompts.allowed.map(\.id))
-            .union([Bundle.main.bundleIdentifier ?? ""])
-        let ids = Set(mutableRecorders.map(\.id)).subtracting(protected)
-        return NSWorkspace.shared.runningApplications.filter { app in
-            guard let id = app.bundleIdentifier else { return false }
-            return ids.contains(id)
-        }
+    private func meetingEnded() {
+        let silenced = silencedThisMeeting
+        state = .idle
+        meetingSource = nil
+        meetingStart = nil
+        pausedForMeeting = false
+        prompts.record(silenced > 0 ? "Meeting ended · \(silenced) silenced" : "Meeting ended")
     }
 
-    /// Muted apps that are safe to act on (never a meeting app like Zoom).
-    private var mutableRecorders: [RecorderApp] {
-        let meetingIDs = Set(MeetingApp.known.flatMap(\.bundleIDs))
-        return prompts.muted.filter { !meetingIDs.contains($0.id) }
+    /// Window titles of a browser using the microphone, to tell a call from voice search.
+    private func browserTitles(_ browser: MeetingApp) -> [String] {
+        guard hasAccessibility else { return [] }
+        if let cached = titleCache[browser.name], Date().timeIntervalSince(cached.at) < 3 { return cached.titles }
+        let titles = browser.bundleIDs
+            .flatMap { NSRunningApplication.runningApplications(withBundleIdentifier: $0) }
+            .flatMap { AX.windows(of: $0.processIdentifier) }
+            .compactMap { AX.string($0, kAXTitleAttribute) }
+        titleCache[browser.name] = (titles, Date())
+        return titles
     }
 
-    /// Dismisses popup-style windows from muted apps. Runs every tick of a meeting, since
-    /// apps re-show popups (and pre-create them hidden).
-    private func dismissPopups() {
-        let names = Dictionary(mutableRecorders.map { ($0.id, $0.displayName) }, uniquingKeysWith: { a, _ in a })
-        for app in targets() {
-            let pid = app.processIdentifier
-            if webAccessible.insert(pid).inserted { Self.exposeWebContent(pid) }
-            let name = app.bundleIdentifier.flatMap { names[$0] } ?? app.localizedName ?? "app"
-            for window in Self.windows(of: pid) where Self.isPopupLike(window) {
-                let isParked = parked.contains { CFEqual($0.window, window) }
-                if !isParked, Self.pressDismissButton(in: window) || Self.close(window) {
-                    log(window, "Closed \(name) popup")
-                } else if let origin = Self.position(of: window), origin.x > Self.offscreen.x / 2 {
-                    // No button to press: move it away, and again whenever the app moves it back.
-                    if !isParked { parked.append((pid, window, origin)) }
-                    Self.setPosition(of: window, to: Self.offscreen)
-                    log(window, "Moved \(name) popup out of sight")
-                }
+    // MARK: Engine
+
+    private func runEngine() {
+        guard !engineBusy else { return }
+        // Targets go to the engine whenever it can see them, so it keeps track of which windows
+        // were already open; `suppress` says whether to act.
+        let suppress = prompts.isEnabled && !(state == .inMeeting && pausedForMeeting)
+        let inMeeting = state == .inMeeting
+        let banners = suppress && hasAccessibility && (inMeeting || prompts.bannerScope == .always)
+        let request = EngineRequest(targets: hasAccessibility ? targets() : [], inMeeting: inMeeting,
+                                    suppress: suppress, closeBanners: banners,
+                                    notificationCenterPID: banners ? notificationCenter() : nil)
+        engineBusy = true
+        engine.run(request) { [weak self] events in
+            Task { @MainActor in
+                self?.engineBusy = false
+                self?.handle(events)
             }
         }
     }
 
-    private func log(_ window: AXUIElement, _ message: String) {
-        guard !handled.contains(where: { CFEqual($0, window) }) else { return }
-        handled.append(window)
+    private func handle(_ events: [EngineEvent]) {
+        for event in events {
+            switch event {
+            case .closedPopup(let app):
+                silenced("Closed \(app) popup")
+            case .hidPopup(let app):
+                silenced("Hid \(app) popup until the call ends")
+            case .closedBanner(let app):
+                silenced("Closed \(app) notification")
+            case .note(let text):
+                notes = Array((notes + [text]).suffix(20))
+            }
+        }
+    }
+
+    private func silenced(_ message: String) {
         prompts.record(message)
+        prompts.countSilenced()
+        if state == .inMeeting { silencedThisMeeting += 1 }
     }
 
-    /// Puts parked popups back where they were, for apps matching `shouldRestore`.
-    private func unpark(where shouldRestore: (pid_t) -> Bool) {
-        parked.removeAll { entry in
-            guard shouldRestore(entry.pid) else { return false }
-            Self.setPosition(of: entry.window, to: entry.origin)
-            return true
+    /// Running apps the user muted, minus anything protected.
+    private func targets() -> [MuteTarget] {
+        let muted = prompts.muted
+        guard !muted.isEmpty else { return [] }
+        let me = Bundle.main.bundleIdentifier ?? ""
+        return NSWorkspace.shared.runningApplications.compactMap { running in
+            guard let id = running.bundleIdentifier, id != me, !MeetingApp.isProtected(id),
+                  let recorder = muted.first(where: { BundleID.matches(id, base: $0.id) }) else { return nil }
+            // The app's own names only: a shared registry name ("ChatGPT") would also match an
+            // allowed sibling app.
+            var names: Set<String> = [recorder.displayName, recorder.app.name, recorder.app.fileName]
+            if let name = running.localizedName { names.insert(name) }
+            return MuteTarget(pid: running.processIdentifier, bundleID: id, displayName: recorder.displayName,
+                              bannerNames: Set(names.map { $0.lowercased() }), known: recorder.known,
+                              launchedAt: running.launchDate)
         }
     }
 
-    nonisolated private static let offscreen = CGPoint(x: -30_000, y: -30_000)
-
-    nonisolated private static func position(of window: AXUIElement) -> CGPoint? {
-        var value: CFTypeRef?
-        var point = CGPoint.zero
-        guard AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &value) == .success,
-              let value, CFGetTypeID(value) == AXValueGetTypeID(),
-              AXValueGetValue(value as! AXValue, .cgPoint, &point) else { return nil }
-        return point
+    private func recorderPIDs() -> [pid_t] {
+        let ids = prompts.recorders.map(\.id)
+        return NSWorkspace.shared.runningApplications
+            .filter { app in app.bundleIdentifier.map { id in ids.contains { BundleID.matches(id, base: $0) } } ?? false }
+            .map(\.processIdentifier)
     }
 
-    nonisolated private static func setPosition(of window: AXUIElement, to point: CGPoint) {
-        var point = point
-        guard let value = AXValueCreate(.cgPoint, &point) else { return }
-        AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, value)
-    }
-
-    /// Electron apps (Granola, Circleback…) only expose their web content to Accessibility
-    /// when asked, which is where a popup's dismiss button lives.
-    nonisolated private static func exposeWebContent(_ pid: pid_t) {
-        AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), "AXManualAccessibility" as CFString, kCFBooleanTrue)
-    }
-
-    nonisolated private static let dismissLabels: Set<String> = [
-        "dismiss", "close", "not now", "ignore", "no thanks", "no, thanks", "skip", "later",
-        "maybe later", "cancel", "x", "×", "✕", "✖",
-    ]
-
-    /// Presses a button labelled like "Dismiss" / "Not now" / "×" inside the popup.
-    nonisolated private static func pressDismissButton(in window: AXUIElement) -> Bool {
-        var target: AXUIElement?
-        walk(window, depth: 0, maxDepth: 25) { element in
-            guard target == nil else { return true }
-            guard string(element, kAXRoleAttribute) == (kAXButtonRole as String) else { return false }
-            let labels = [kAXTitleAttribute, kAXDescriptionAttribute, kAXHelpAttribute]
-                .compactMap { string(element, $0)?.trimmingCharacters(in: .whitespaces).lowercased() }
-            if labels.contains(where: { dismissLabels.contains($0) || $0.hasPrefix("dismiss") }) { target = element }
-            return true
-        }
-        guard let target else { return false }
-        return AXUIElementPerformAction(target, kAXPressAction as CFString) == .success
-    }
-
-    nonisolated private static func windows(of pid: pid_t) -> [AXUIElement] {
-        let app = AXUIElementCreateApplication(pid)
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
-              let windows = value as? [AXUIElement] else { return [] }
-        return windows
-    }
-
-    /// Small or non-standard windows (floating panels, "meeting detected" toasts, indicators).
-    nonisolated private static func isPopupLike(_ window: AXUIElement) -> Bool {
-        if let subrole = string(window, kAXSubroleAttribute), subrole != (kAXStandardWindowSubrole as String) {
-            return true
-        }
-        var value: CFTypeRef?
-        var size = CGSize.zero
-        guard AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &value) == .success,
-              let value, CFGetTypeID(value) == AXValueGetTypeID(),
-              AXValueGetValue(value as! AXValue, .cgSize, &size) else { return false }
-        return size.width * size.height < 500 * 400
-    }
-
-    /// Presses the window's close button. Returns false if it has none.
-    nonisolated private static func close(_ window: AXUIElement) -> Bool {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(window, kAXCloseButtonAttribute as CFString, &value) == .success,
-              let button = value, CFGetTypeID(button) == AXUIElementGetTypeID() else { return false }
-        return AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString) == .success
-    }
-
-    /// Closes macOS notification banners posted by muted apps. Banners belong to Notification
-    /// Center's process; their description starts with the posting app's name, e.g.
-    /// "Granola, Meeting detected, Chrome".
-    private func closeNotificationBanners() {
-        let recorders = mutableRecorders
-        guard !recorders.isEmpty,
-              let center = NSRunningApplication.runningApplications(
-                withBundleIdentifier: "com.apple.notificationcenterui").first else { return }
-        let prefixes = recorders.flatMap { recorder in
-            Set([recorder.displayName, recorder.app.name]).map { ("\($0.lowercased()), ", recorder) }
-        }
-        for window in Self.windows(of: center.processIdentifier) {
-            Self.walk(window, depth: 0) { element in
-                guard let subrole = Self.string(element, kAXSubroleAttribute),
-                      subrole.hasPrefix("AXNotificationCenter"),
-                      let text = Self.string(element, kAXDescriptionAttribute) else { return false }
-                let lower = text.lowercased()
-                guard let (_, recorder) = prefixes.first(where: { lower.hasPrefix($0.0) }) else {
-                    return false  // Not a muted app (or a stack): look inside.
-                }
-                let bannerID = Self.string(element, kAXIdentifierAttribute) ?? text
-                if Self.performClose(element), !closedBanners.contains(bannerID) {
-                    closedBanners = Array((closedBanners + [bannerID]).suffix(20))
-                    prompts.record("Closed \(recorder.displayName) notification")
-                }
-                return true
-            }
-        }
-    }
-
-    /// Depth-first walk; `visit` returns true to stop descending into that element.
-    nonisolated private static func walk(_ element: AXUIElement, depth: Int, maxDepth: Int = 8,
-                                         visit: (AXUIElement) -> Bool) {
-        guard depth < maxDepth, !visit(element) else { return }
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &value) == .success,
-              let children = value as? [AXUIElement] else { return }
-        for child in children { walk(child, depth: depth + 1, maxDepth: maxDepth, visit: visit) }
-    }
-
-    nonisolated private static func string(_ element: AXUIElement, _ attribute: String) -> String? {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
-        return value as? String
-    }
-
-    /// Runs the banner's "Close" action (a named custom action on Notification Center banners).
-    nonisolated private static func performClose(_ element: AXUIElement) -> Bool {
-        var names: CFArray?
-        guard AXUIElementCopyActionNames(element, &names) == .success,
-              let actions = names as? [String],
-              let close = actions.first(where: { $0.localizedCaseInsensitiveContains("close") }) else { return false }
-        return AXUIElementPerformAction(element, close as CFString) == .success
+    private func notificationCenter() -> pid_t? {
+        if let pid = notificationCenterPID, NSRunningApplication(processIdentifier: pid) != nil { return pid }
+        notificationCenterPID = NSRunningApplication
+            .runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first?.processIdentifier
+        return notificationCenterPID
     }
 }

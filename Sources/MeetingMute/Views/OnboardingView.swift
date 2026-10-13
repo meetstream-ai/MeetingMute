@@ -1,3 +1,4 @@
+import MeetingMuteCore
 import SwiftUI
 
 /// First-run guide: what the app does, the one permission it needs, and what to mute.
@@ -36,11 +37,13 @@ struct OnboardingView: View {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 128, height: 128)
+                .accessibilityHidden(true)
         } content: {
             VStack(alignment: .leading, spacing: 14) {
                 GuidePoint(symbol: "bell.slash.fill", text: "Pick the apps to mute")
                 GuidePoint(symbol: "video.fill", text: "Join a meeting as usual")
                 GuidePoint(symbol: "sparkles", text: "Their popups close on their own")
+                GuidePoint(symbol: "lock.fill", text: "Runs on your Mac. Nothing leaves it")
             }
         }
     }
@@ -72,11 +75,11 @@ struct OnboardingView: View {
 
     private var chooseApps: some View {
         StepLayout(title: "What should stay quiet?",
-                   subtitle: "Tap an app to mute it during meetings.") {
+                   subtitle: "Tap the bell to mute an app. Works with \(Registry.apps.count) notetakers, dictation apps and meeting reminders.") {
             EmptyView()
         } content: {
             if prompts.recorders.isEmpty {
-                Text("No notetakers found yet. They'll show up when they launch.")
+                Text("No notetakers on this Mac yet. Known apps show up as soon as they're installed, and apps that start using the microphone are suggested.")
                     .font(.callout)
                     .foregroundStyle(Brand.textSecondary)
             } else {
@@ -103,6 +106,7 @@ struct OnboardingView: View {
                         .frame(width: i == step ? 18 : 6, height: 6)
                 }
             }
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel("Step \(step + 1) of 3")
             Spacer()
             if step > 0 {
@@ -112,6 +116,7 @@ struct OnboardingView: View {
             if step == 1 && !suppressor.hasAccessibility {
                 Button("Later") { step += 1 }
                     .buttonStyle(BrandGlassButtonStyle())
+                    .keyboardShortcut(.defaultAction)
             } else {
                 Button(step == 2 ? "Done" : "Continue") {
                     if step == 2 { onFinish() } else { step += 1 }

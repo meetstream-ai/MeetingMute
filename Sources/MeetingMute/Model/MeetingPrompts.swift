@@ -1,50 +1,27 @@
 import AppKit
+import MeetingMuteCore
 import Observation
 import UniformTypeIdentifiers
 
-/// A notetaker / recorder that may show its own "meeting detected" prompt.
-struct KnownRecorder {
-    let name: String
-    /// Bundle IDs confirmed from a real Info.plist.
-    let bundleIDs: [String]
-    /// Lowercased app-name fragments, used when the bundle ID isn't confirmed.
-    let nameMatches: [String]
-
-    static let all: [KnownRecorder] = [
-        KnownRecorder(name: "Granola", bundleIDs: ["com.granola.app"], nameMatches: ["granola"]),
-        KnownRecorder(name: "Wispr Flow", bundleIDs: ["com.electron.wispr-flow"], nameMatches: ["wispr"]),
-        KnownRecorder(name: "MacWhisper", bundleIDs: ["com.goodsnooze.MacWhisper"], nameMatches: ["macwhisper"]),
-        KnownRecorder(name: "Circleback", bundleIDs: [], nameMatches: ["circleback"]),
-        KnownRecorder(name: "Otter", bundleIDs: [], nameMatches: ["otter"]),
-        KnownRecorder(name: "Fireflies", bundleIDs: [], nameMatches: ["fireflies"]),
-        KnownRecorder(name: "Fathom", bundleIDs: [], nameMatches: ["fathom"]),
-        KnownRecorder(name: "superwhisper", bundleIDs: [], nameMatches: ["superwhisper"]),
-        KnownRecorder(name: "Krisp", bundleIDs: [], nameMatches: ["krisp"]),
-        KnownRecorder(name: "tl;dv", bundleIDs: [], nameMatches: ["tl;dv", "tldv"]),
-        KnownRecorder(name: "Jamie", bundleIDs: [], nameMatches: ["jamie"]),
-        KnownRecorder(name: "Bluedot", bundleIDs: [], nameMatches: ["bluedot"]),
-        KnownRecorder(name: "Read AI", bundleIDs: [], nameMatches: ["read ai", "read.ai"]),
-        KnownRecorder(name: "Notion", bundleIDs: [], nameMatches: ["notion"]),
-        KnownRecorder(name: "Limitless", bundleIDs: [], nameMatches: ["limitless"]),
-        KnownRecorder(name: "Tactiq", bundleIDs: [], nameMatches: ["tactiq"]),
-        KnownRecorder(name: "Avoma", bundleIDs: [], nameMatches: ["avoma"]),
-    ]
-
-    func matches(_ app: InstalledApp) -> Bool {
-        if bundleIDs.contains(app.bundleID) { return true }
-        let name = app.name.lowercased()
-        return nameMatches.contains { name.contains($0) }
-    }
-}
-
-/// A recorder app on this Mac.
-struct RecorderApp: Identifiable {
+/// An app on the list: a known notetaker (from the registry) or one added by hand.
+struct RecorderApp: Identifiable, Hashable {
     let app: InstalledApp
+    let known: KnownApp?
     let displayName: String
 
     var id: String { app.bundleID }
+    var category: KnownApp.Category? { known?.category }
 
-    /// System Settings > Notifications, scrolled to this app.
+    /// Where to turn the prompt off inside the app, without the app's own name in front.
+    var offSwitchPath: String? {
+        guard let off = known?.offSwitch else { return nil }
+        for name in [known?.name, displayName].compactMap({ $0 }) where off.hasPrefix(name + " › ") {
+            return String(off.dropFirst(name.count + 3))
+        }
+        return off
+    }
+
+    /// System Settings › Notifications, scrolled to this app.
     var notificationSettingsURL: URL {
         URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(app.bundleID)")!
     }
@@ -56,98 +33,177 @@ enum MuteMode: String {
     case custom
     /// Every app is muted except `onlyID`.
     case allButOne
-    /// Every app is muted, including ones detected later.
+    /// Every app is muted, including known apps installed later.
     case all
 }
 
-struct ActivityEntry: Codable, Identifiable {
-    var id = UUID()
-    let date: Date
-    let message: String
+/// When Notification Center banners from muted apps are closed.
+enum BannerScope: String {
+    /// During meetings: the prompts, plus "next meeting in 1 minute" reminders mid-call.
+    case meetings
+    /// Always, e.g. for calendar reminders before a call starts.
+    case always
 }
 
-/// Which recorder apps are muted during meetings. Everything is allowed until the user mutes
-/// it, so a fresh install changes nothing.
+/// Which apps are muted during meetings. Everything is allowed until the user mutes it,
+/// so a fresh install changes nothing.
 @MainActor
 @Observable
 final class MeetingPromptsStore {
     private let catalog: AppCatalog
-    private let defaults = UserDefaults.standard
+    private let defaults = Demo.defaults
 
     private(set) var mode: MuteMode
     /// The one app that can prompt in `.allButOne`.
     private(set) var onlyID: String?
     /// Muted apps in `.custom`.
     private(set) var mutedIDs: Set<String>
-    /// Apps found on the fly (picked by hand, or seen using the microphone).
+    /// Apps added by hand or found using the microphone.
     private(set) var extraIDs: [String]
-    /// Apps the user removed from the list; never re-detected.
+    /// Apps found using the microphone that the user hasn't looked at yet. Never muted until
+    /// the user mutes them, whatever the mode.
+    private(set) var suggestedIDs: Set<String>
+    /// Apps the user removed from the list; never suggested again.
     private(set) var hiddenIDs: Set<String>
     private(set) var log: [ActivityEntry]
+    /// Popups and banners closed since install.
+    private(set) var silencedTotal: Int
 
     /// Master switch.
     var isEnabled: Bool {
         didSet { defaults.set(isEnabled, forKey: "enabled") }
     }
+    var bannerScope: BannerScope {
+        didSet { defaults.set(bannerScope.rawValue, forKey: "bannerScope") }
+    }
+    /// Count any browser microphone use as a meeting, not just tabs that look like calls.
+    var anyBrowserMicCounts: Bool {
+        didSet { defaults.set(anyBrowserMicCounts, forKey: "anyBrowserMic") }
+    }
 
     init(catalog: AppCatalog) {
         self.catalog = catalog
+        if Demo.isOn { Demo.seed(defaults) } else { Self.migrateFromV1(defaults) }
         mode = MuteMode(rawValue: defaults.string(forKey: "mode") ?? "") ?? .custom
         onlyID = defaults.string(forKey: "onlyID")
         mutedIDs = Set(defaults.stringArray(forKey: "muted") ?? [])
         extraIDs = defaults.stringArray(forKey: "extra") ?? []
+        suggestedIDs = Set(defaults.stringArray(forKey: "suggested") ?? [])
         hiddenIDs = Set(defaults.stringArray(forKey: "hidden") ?? [])
         isEnabled = defaults.object(forKey: "enabled") as? Bool ?? true
+        bannerScope = BannerScope(rawValue: defaults.string(forKey: "bannerScope") ?? "") ?? .meetings
+        anyBrowserMicCounts = defaults.bool(forKey: "anyBrowserMic")
+        silencedTotal = defaults.integer(forKey: "silencedTotal")
         log = defaults.data(forKey: "log")
             .flatMap { try? JSONDecoder().decode([ActivityEntry].self, from: $0) } ?? []
         // Extra apps may live outside the scanned folders.
-        for path in defaults.stringArray(forKey: "extraPaths") ?? [] {
+        for path in Set(defaults.stringArray(forKey: "extraPaths") ?? []) {
             catalog.register(URL(fileURLWithPath: path))
         }
     }
 
-    /// Known recorders on disk plus extra ones, sorted by name.
+    /// v1.0 used the bundle ID com.rohanganesh.MeetingMute; carry its settings over once.
+    private static func migrateFromV1(_ defaults: UserDefaults) {
+        guard !defaults.bool(forKey: "migratedFromV1") else { return }
+        defaults.set(true, forKey: "migratedFromV1")
+        guard let old = defaults.persistentDomain(forName: "com.rohanganesh.MeetingMute") else { return }
+        for (key, value) in old where defaults.object(forKey: key) == nil { defaults.set(value, forKey: key) }
+    }
+
+    // MARK: The list
+
+    @ObservationIgnored private var cache: (key: String, list: [RecorderApp])?
+
+    /// Known apps on this Mac plus apps added by hand, grouped by category, then by name.
+    /// Cached until the installed apps or the list's own settings change.
     var recorders: [RecorderApp] {
-        catalog.installed.values
-            .filter { !hiddenIDs.contains($0.bundleID) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-            .compactMap { app in
-                if let known = KnownRecorder.all.first(where: { $0.matches(app) }) {
-                    return RecorderApp(app: app, displayName: known.name)
-                }
-                return extraIDs.contains(app.bundleID) ? RecorderApp(app: app, displayName: app.name) : nil
+        let key = "\(catalog.generation)|\(hiddenIDs.sorted())|\(extraIDs)"
+        if let cache, cache.key == key { return cache.list }
+        let list = buildRecorders()
+        cache = (key, list)
+        return list
+    }
+
+    private func buildRecorders() -> [RecorderApp] {
+        let me = Bundle.main.bundleIdentifier ?? ""
+        var list: [RecorderApp] = catalog.installed.values.compactMap { app in
+            guard !hiddenIDs.contains(app.bundleID), app.bundleID != me, !MeetingApp.isProtected(app.bundleID) else {
+                return nil
             }
+            let known = Registry.match(bundleID: app.bundleID, names: [app.name, app.fileName])
+            guard known != nil || extraIDs.contains(app.bundleID) else { return nil }
+            return RecorderApp(app: app, known: known, displayName: known?.name ?? app.name)
+        }
+        // Two apps for one entry (ChatGPT and ChatGPT Classic): show their own names.
+        let counts = Dictionary(grouping: list, by: \.displayName).mapValues(\.count)
+        list = list.map { r in
+            counts[r.displayName, default: 0] > 1 ? RecorderApp(app: r.app, known: r.known, displayName: r.app.name) : r
+        }
+        let order = KnownApp.Category.allCases
+        return list.sorted { a, b in
+            let ia = a.category.flatMap { order.firstIndex(of: $0) } ?? order.count
+            let ib = b.category.flatMap { order.firstIndex(of: $0) } ?? order.count
+            if ia != ib { return ia < ib }
+            return a.displayName.localizedCaseInsensitiveCompare(b.displayName) == .orderedAscending
+        }
+    }
+
+    struct Group: Identifiable {
+        let title: String
+        let symbol: String
+        let apps: [RecorderApp]
+        var id: String { title }
+    }
+
+    /// The list split by category, with apps added by hand last.
+    var groups: [Group] {
+        let list = recorders
+        var groups = KnownApp.Category.allCases.compactMap { category -> Group? in
+            let apps = list.filter { $0.category == category }
+            return apps.isEmpty ? nil : Group(title: category.title, symbol: category.symbol, apps: apps)
+        }
+        let added = list.filter { $0.category == nil }
+        if !added.isEmpty { groups.append(Group(title: "Added", symbol: "plus.app", apps: added)) }
+        return groups
     }
 
     var allowed: [RecorderApp] { recorders.filter(isAllowed) }
     var muted: [RecorderApp] { recorders.filter { !isAllowed($0) } }
 
     func isAllowed(_ recorder: RecorderApp) -> Bool {
+        if suggestedIDs.contains(recorder.id) { return true }
         switch mode {
-        case .custom: !mutedIDs.contains(recorder.id)
-        case .allButOne: recorder.id == onlyID
-        case .all: false
+        case .custom: return !mutedIDs.contains(recorder.id)
+        case .allButOne: return recorder.id == onlyID
+        case .all: return false
         }
     }
+
+    func isSuggested(_ recorder: RecorderApp) -> Bool { suggestedIDs.contains(recorder.id) }
     func isRunning(_ recorder: RecorderApp) -> Bool { catalog.isRunning(recorder.id) }
 
     func setMuted(_ recorder: RecorderApp, _ mute: Bool) {
+        // A suggested app shows as allowed; muting it just takes it out of suggestions, after
+        // which the mode decides (it's muted in "All but one" and "Mute all").
+        let wasSuggested = suggestedIDs.remove(recorder.id) != nil
         switch (mode, mute) {
         case (.custom, _):
             if mute { mutedIDs.insert(recorder.id) } else { mutedIDs.remove(recorder.id) }
             save()
             record("\(mute ? "Muted" : "Unmuted") \(recorder.displayName)")
-        case (.allButOne, true):
+        case (.allButOne, true) where !wasSuggested:
             setMode(.all)  // Muting the one allowed app leaves nothing allowed.
+        case (_, true):
+            save()
+            record("Muted \(recorder.displayName)")
         case (_, false):
             allowOnly(recorder)  // Unmuting one app in a mute-all mode swaps which one may prompt.
-        case (.all, true):
-            break
         }
     }
 
-    /// Mute every recorder except one.
+    /// Mute every app except one.
     func allowOnly(_ recorder: RecorderApp) {
+        suggestedIDs.remove(recorder.id)
         mode = .allButOne
         onlyID = recorder.id
         save()
@@ -159,8 +215,10 @@ final class MeetingPromptsStore {
         if next == .custom {
             mutedIDs = Set(muted.map(\.id))  // Keep what's muted right now.
         }
-        if next == .allButOne, !recorders.contains(where: { $0.id == onlyID }) {
-            onlyID = (allowed.first ?? recorders.first)?.id
+        // Keep the current one-allowed app only if it is on the list and allowed right now;
+        // otherwise pick an allowed app that isn't just a suggestion.
+        if next == .allButOne, !recorders.contains(where: { $0.id == onlyID && isAllowed($0) && !isSuggested($0) }) {
+            onlyID = (allowed.first { !isSuggested($0) } ?? recorders.first)?.id
         }
         mode = next
         save()
@@ -182,45 +240,60 @@ final class MeetingPromptsStore {
 
     // MARK: Adding and removing apps
 
-    /// Lets the user pick any app to treat as a recorder.
+    /// Lets the user pick any app to treat as a notetaker.
     func addManually() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.applicationBundle]
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
         panel.prompt = "Add"
-        NSApp.activate(ignoringOtherApps: true)
+        panel.message = "Choose an app whose popups you want MeetingMute to manage."
+        NSApp.activate()
         guard panel.runModal() == .OK, let url = panel.url, let app = catalog.register(url) else { return }
+        if MeetingApp.isProtected(app.bundleID) || app.bundleID == Bundle.main.bundleIdentifier {
+            record("\(app.name) is a meeting app, so MeetingMute never touches it")
+            return
+        }
         hiddenIDs.remove(app.bundleID)
+        suggestedIDs.remove(app.bundleID)
         addExtra(app)
         record("Added \(app.name)")
     }
 
-    /// Called with the bundle IDs of processes using the microphone. A non-meeting app
-    /// recording audio is probably a notetaker or dictation app, so it joins the list.
+    /// Called with the bundle IDs of processes recording audio. An unknown app recording
+    /// audio may be a notetaker, so it's suggested (but never muted until the user says so).
     func noteMicrophoneUsers(_ bundleIDs: [String]) {
-        let meetingIDs = MeetingApp.known.flatMap(\.bundleIDs)
-        let ignored = hiddenIDs.union(extraIDs).union(recorders.map(\.id))
+        guard !bundleIDs.isEmpty, !Demo.isOn else { return }
+        let listed = Set(recorders.map(\.id)).union(hiddenIDs).union(extraIDs)
         for app in NSWorkspace.shared.runningApplications where app.activationPolicy != .prohibited {
             guard let id = app.bundleIdentifier, let url = app.bundleURL,
-                  !id.hasPrefix("com.apple."), id != Bundle.main.bundleIdentifier, !ignored.contains(id),
-                  // Meeting apps and their helpers (e.g. com.google.Chrome.helper).
-                  !meetingIDs.contains(where: { id == $0 || id.hasPrefix($0 + ".") }),
+                  !id.hasPrefix("com.apple."), id != Bundle.main.bundleIdentifier, !listed.contains(id),
+                  !MeetingApp.isProtected(id), !Registry.isQuietMicrophoneApp(id),
                   // Helper bundles nested inside another app.
                   !url.deletingLastPathComponent().path.contains(".app/"),
-                  bundleIDs.contains(where: { $0 == id || $0.hasPrefix(id + ".") }),
+                  bundleIDs.contains(where: { BundleID.matches($0, base: id) }),
                   let installed = catalog.register(url) else { continue }
+            suggestedIDs.insert(installed.bundleID)
             addExtra(installed)
-            record("Found \(installed.name)")
+            record("Found \(installed.name) using the microphone")
         }
     }
 
-    /// Takes an app off the list; it won't be detected again until added by hand.
+    /// Takes an app off the list; it won't be suggested again until added by hand.
     func remove(_ recorder: RecorderApp) {
         extraIDs.removeAll { $0 == recorder.id }
         mutedIDs.remove(recorder.id)
-        if onlyID == recorder.id { onlyID = nil }
+        suggestedIDs.remove(recorder.id)
+        if onlyID == recorder.id {
+            // "All but one" with nobody left allowed is "Mute all"; say so.
+            onlyID = nil
+            if mode == .allButOne { mode = .all }
+        }
         hiddenIDs.insert(recorder.id)
+        var paths = defaults.stringArray(forKey: "extraPaths") ?? []
+        paths.removeAll { $0 == recorder.app.url.path }
+        defaults.set(paths, forKey: "extraPaths")
         save()
+        record("Removed \(recorder.displayName)")
     }
 
     /// Apps the user took off the list that are still installed.
@@ -232,21 +305,22 @@ final class MeetingPromptsStore {
     /// Puts a removed app back on the list.
     func restore(_ app: InstalledApp) {
         hiddenIDs.remove(app.bundleID)
-        if !KnownRecorder.all.contains(where: { $0.matches(app) }) { addExtra(app) }
+        if Registry.match(bundleID: app.bundleID, names: [app.name, app.fileName]) == nil { addExtra(app) }
         save()
         record("Added \(app.name)")
     }
 
     /// Where an app on the list came from.
     func source(of recorder: RecorderApp) -> String {
-        KnownRecorder.all.contains { $0.matches(recorder.app) } ? "Built-in" : "Added"
+        if recorder.known != nil { return "Built-in" }
+        return suggestedIDs.contains(recorder.id) ? "Found" : "Added"
     }
 
     private func addExtra(_ app: InstalledApp) {
         guard !extraIDs.contains(app.bundleID) else { return }
         extraIDs.append(app.bundleID)
         var paths = defaults.stringArray(forKey: "extraPaths") ?? []
-        paths.append(app.url.path)
+        if !paths.contains(app.url.path) { paths.append(app.url.path) }
         defaults.set(paths, forKey: "extraPaths")
         save()
     }
@@ -255,12 +329,18 @@ final class MeetingPromptsStore {
         NSWorkspace.shared.openApplication(at: recorder.app.url, configuration: .init())
     }
 
+    func rescan() { catalog.rescan() }
+
     // MARK: Activity
 
     func record(_ message: String) {
-        log.insert(ActivityEntry(date: .now, message: message), at: 0)
-        if log.count > 100 { log.removeLast(log.count - 100) }
+        log = ActivityLog.appending(message, at: .now, to: log)
         if let data = try? JSONEncoder().encode(log) { defaults.set(data, forKey: "log") }
+    }
+
+    func countSilenced() {
+        silencedTotal += 1
+        defaults.set(silencedTotal, forKey: "silencedTotal")
     }
 
     func clearLog() {
@@ -273,6 +353,7 @@ final class MeetingPromptsStore {
         defaults.set(onlyID, forKey: "onlyID")
         defaults.set(Array(mutedIDs), forKey: "muted")
         defaults.set(extraIDs, forKey: "extra")
+        defaults.set(Array(suggestedIDs), forKey: "suggested")
         defaults.set(Array(hiddenIDs), forKey: "hidden")
     }
 }

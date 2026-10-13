@@ -30,10 +30,10 @@ private struct BrandGlass<S: InsettableShape>: ViewModifier {
                 .background {
                     ZStack {
                         shape.fill(.ultraThinMaterial)
-                        if let tint { shape.fill(tint.opacity(0.35)) }
+                        if let tint { shape.fill(tint.opacity(0.75)) }
                     }
                 }
-                .overlay { shape.strokeBorder(.white.opacity(0.15), lineWidth: 1) }
+                .overlay { shape.strokeBorder(Brand.border, lineWidth: 1) }
                 .shadow(color: .black.opacity(0.18), radius: 12, y: 6)
         }
     }
