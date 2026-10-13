@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Supported apps
+    url: https://github.com/meetstream-ai/MeetingMute/blob/main/docs/SUPPORTED_APPS.md
+    about: Check whether MeetingMute already knows your app.
