@@ -16,6 +16,7 @@ MeetingMute is now a [MeetStream](https://meetstream.ai) open-source project.
 - Search, category groups, activity log grouped by day with repeats folded, a lifetime "silenced" counter.
 - About tab, Help menu links and **Copy for a Bug Report**.
 - New app icon.
+- Docs: [ARCHITECTURE.md](docs/ARCHITECTURE.md) (design and reasons), [RELEASING.md](docs/RELEASING.md) (release steps and a live test), CONTRIBUTING, SECURITY.
 - `swift run CoreChecks`, demo mode for screenshots (`--demo`), universal and zip build options, CI.
 
 ### Changed

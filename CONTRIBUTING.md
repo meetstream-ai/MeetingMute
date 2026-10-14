@@ -74,6 +74,8 @@ Watch for these traps (they're all real):
 
 ## Code
 
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first: it explains the safety rules and why each part works the way it does.
+
 - `Sources/MeetingMuteCore` is pure logic with no AppKit; put anything testable there and add checks to `Sources/CoreChecks/main.swift`.
 - `Sources/MeetingMute/Model/AXEngine.swift` does all Accessibility work on a background queue. Keep AX calls out of the main thread.
 - Never press a button by a partial label match, and never act on meeting apps (`MeetingApp.isProtected`).
@@ -82,6 +84,7 @@ Watch for these traps (they're all real):
 ## Pull requests
 
 - One topic per PR.
+- Changes to the engine or the dismiss policy: run the live test in [docs/RELEASING.md](docs/RELEASING.md#live-test) and say what you saw.
 - `swift build -c release`, `swift run CoreChecks` and `python3 scripts/gen_registry.py --check` pass.
 - For UI changes, a before and after screenshot (`open build/MeetingMute.app --args --demo` helps).
 

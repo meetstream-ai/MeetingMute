@@ -147,6 +147,8 @@ flowchart LR
 2. **Popups.** During a call, a window from a muted app is a candidate only if it is **new** (appeared just before the call or during it), **prompt-sized**, and its text is **about a meeting**. MeetingMute then presses that app's decline button once. The button list comes from research on each app; anything that records, joins, invites a bot or changes settings is never pressed. If there's no safe button, and the window clearly reads as that app's call-start prompt, it uses the window's own close button, and failing that moves the popup off screen and puts it back when the call ends, when you pause or unmute, or when MeetingMute quits. Anything less certain is left alone.
 3. **Notification banners.** Banners from muted apps are closed with Notification Center's own *Close* action, matched in every language macOS ships. On macOS 26 all banners share one host window, which MeetingMute never hides.
 
+The full design, with the reasons behind each rule, is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 **Safety rules**
 
 - Meeting apps and browsers are never touched, and neither is any app you allow.
@@ -227,7 +229,7 @@ Sources/CoreChecks/          `swift run CoreChecks`: checks that run with only t
 - `open build/MeetingMute.app --args --demo` opens a screenshot mode with sample apps and no Accessibility work. Add `--demo-meeting`, `--demo-rows`, `--demo-onboarding`, `--demo-settings`, `--light`, `--dark` or `--demo-icons <folder>`.
 - Changed `registry/apps.json`? Run `python3 scripts/gen_registry.py`. CI fails if the generated files are stale, and runs `CoreChecks` on Linux.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add an app or report a popup that slips through.
+More: [ARCHITECTURE.md](docs/ARCHITECTURE.md) (how each part works and why), [RELEASING.md](docs/RELEASING.md) (release steps and the live test), [CONTRIBUTING.md](CONTRIBUTING.md) (add an app, report a popup that slips through), [CHANGELOG.md](CHANGELOG.md).
 
 ## Credits
 
