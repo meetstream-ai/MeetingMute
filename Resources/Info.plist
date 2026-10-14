@@ -7,7 +7,7 @@
     <key>CFBundleDisplayName</key>
     <string>MeetingMute</string>
     <key>CFBundleIdentifier</key>
-    <string>com.rohanganesh.MeetingMute</string>
+    <string>ai.meetstream.MeetingMute</string>
     <key>CFBundleExecutable</key>
     <string>MeetingMute</string>
     <key>CFBundleIconFile</key>
@@ -15,16 +15,22 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>1.1.0</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>2</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
+    <key>LSMultipleInstancesProhibited</key>
+    <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2026 MeetStream. Built by Rohan Ganesh and Sidhdharth Sivasubramanian. MIT License.</string>
 </dict>
 </plist>

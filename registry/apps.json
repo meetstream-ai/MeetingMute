@@ -1,0 +1,368 @@
+{
+  "version": "2026.10.13",
+  "about": "Apps that interrupt you when a call starts. Source of truth for MeetingMute's built-in list. Edit this file, then run `python3 scripts/gen_registry.py`. Every bundle ID needs evidence. Use `appNames` (exact app name, never a fragment) only when no bundle ID is public.",
+  "apps": [
+    {
+      "name": "Granola", "category": "notetaker",
+      "bundleIDs": ["com.granola.app", "com.getgranola.app"],
+      "confidence": "confirmed", "prompt": "window",
+      "keywords": ["meeting detected", "huddle detected", "call detected", "take notes"],
+      "neverPress": ["Take Notes"],
+      "offSwitch": "Granola › Settings › Notifications",
+      "evidence": "https://formulae.brew.sh/api/cask/granola.json"
+    },
+    {
+      "name": "Anarlog", "category": "notetaker",
+      "bundleIDs": ["com.hyprnote.stable", "com.hyprnote.nightly", "com.hyprnote.staging", "com.hyprnote.dev", "com.hyprnote.desktop"],
+      "confidence": "confirmed", "prompt": "window",
+      "keywords": ["are you in a meeting", "right now"],
+      "press": ["Close"], "neverPress": ["Yes"],
+      "offSwitch": "Anarlog › Settings › General › Notifications › Microphone detection",
+      "evidence": "https://github.com/fastrepl/anarlog/blob/HEAD/apps/desktop/src-tauri/tauri.conf.stable.json",
+      "note": "Formerly Hyprnote, then Char. The bundle ID kept the Hyprnote name."
+    },
+    {
+      "name": "Jamie", "category": "notetaker",
+      "bundleIDs": ["com.jamie.app"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "keywords": ["start jamie"],
+      "neverPress": ["Start Jamie", "Join & Start Jamie"],
+      "offSwitch": "Jamie › Settings › Notifications › Auto-Detected Meetings",
+      "evidence": "https://formulae.brew.sh/api/cask/jamie.json"
+    },
+    {
+      "name": "Meetily", "category": "notetaker",
+      "bundleIDs": ["com.meetily.ai"],
+      "confidence": "confirmed", "prompt": "banner",
+      "offSwitch": "Meetily › Settings › Notifications › Meeting reminders",
+      "evidence": "https://github.com/Zackriya-Solutions/meetily/blob/HEAD/frontend/src-tauri/tauri.conf.json"
+    },
+    {
+      "name": "Circleback", "category": "notetaker",
+      "appNames": ["Circleback"],
+      "confidence": "name-only", "prompt": "window",
+      "keywords": ["don't record", "recording"],
+      "press": ["Don't Record"], "neverPress": ["Keep Recording"],
+      "offSwitch": "Circleback › Settings › Notifications › Detect meetings",
+      "evidence": "https://support.circleback.ai/en/articles/10460578-record-meetings-with-the-desktop-app",
+      "note": "Can start recording after a countdown, so MeetingMute presses Don't Record."
+    },
+    {
+      "name": "Notion", "category": "notetaker",
+      "bundleIDs": ["notion.id"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "keywords": ["in a meeting", "ai meeting notes", "join and transcribe"],
+      "neverPress": ["Start AI Meeting Notes", "Turn these notifications off", "Join and transcribe"],
+      "offSwitch": "Notion › Settings › Notifications › Desktop meeting detection notifications",
+      "evidence": "https://formulae.brew.sh/api/cask/notion.json"
+    },
+    {
+      "name": "Amie", "category": "notetaker",
+      "bundleIDs": ["so.amie.electron-app"],
+      "confidence": "confirmed", "prompt": "window",
+      "offSwitch": "Amie › Settings › turn off fully-automatic recordings",
+      "evidence": "https://formulae.brew.sh/api/cask/amie.json"
+    },
+    {
+      "name": "Krisp", "category": "notetaker",
+      "bundleIDs": ["ai.krisp.krispMac"],
+      "confidence": "confirmed", "prompt": "window",
+      "offSwitch": "Krisp › Settings › Call status notifications",
+      "evidence": "https://formulae.brew.sh/api/cask/krisp.json"
+    },
+    {
+      "name": "Hedy", "category": "notetaker",
+      "bundleIDs": ["bot.hedy.mobile"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "offSwitch": "Hedy › Settings › Automation & Data › Meeting app detection",
+      "evidence": "https://formulae.brew.sh/api/cask/hedy.json"
+    },
+    {
+      "name": "Fellow", "category": "notetaker",
+      "bundleIDs": ["com.electron.fellow"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "keywords": ["meeting detected"],
+      "evidence": "https://github.com/autopkg/dataJAR-recipes/blob/master/Fellow/Fellow.download.recipe"
+    },
+    {
+      "name": "Plaud", "category": "notetaker",
+      "bundleIDs": ["ai.plaud.desktop.plaud"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "offSwitch": "Plaud › Preferences › Recording › Meeting detection",
+      "evidence": "https://formulae.brew.sh/api/cask/plaud.json"
+    },
+    {
+      "name": "Heizen Meets", "category": "notetaker",
+      "appNames": ["Heizen", "Heizen Meets"],
+      "confidence": "name-only", "prompt": "unknown",
+      "press": ["Dismiss"], "neverPress": ["Take Notes", "Never notify me"],
+      "offSwitch": "Heizen › Settings › Notifications › Auto-detected meetings",
+      "evidence": "https://docs.heizen.work/meets/automatic-meeting-detection/"
+    },
+    {
+      "name": "Minute", "category": "notetaker",
+      "bundleIDs": ["dev.minute.app"],
+      "confidence": "confirmed", "prompt": "window",
+      "press": ["Dismiss"],
+      "evidence": "https://github.com/mraza007/minute/blob/HEAD/src-tauri/tauri.conf.json"
+    },
+    {
+      "name": "Junior", "category": "notetaker",
+      "appNames": ["Junior"],
+      "confidence": "name-only", "prompt": "unknown",
+      "evidence": "https://docs.myjunior.ai/junior-for-mac-and-windows/meeting-detection/"
+    },
+    {
+      "name": "Cluely", "category": "notetaker",
+      "bundleIDs": ["com.cluely.app"],
+      "confidence": "inferred", "prompt": "unknown",
+      "evidence": "https://github.com/Neved4/homebrew-tap/blob/HEAD/Casks/cluely.rb"
+    },
+    {
+      "name": "Quill", "category": "notetaker",
+      "appNames": ["Quill", "Quill Meetings"],
+      "confidence": "name-only", "prompt": "unknown",
+      "evidence": "https://github.com/quillmeetings/quill-cli/blob/HEAD/src/doctor.js"
+    },
+    {
+      "name": "Shadow", "category": "notetaker",
+      "appNames": ["Shadow"], "excludeBundleIDs": ["com.electron.shadow"],
+      "confidence": "name-only", "prompt": "auto-record",
+      "evidence": "https://www.shadow.do",
+      "note": "Not Shadow PC (com.electron.shadow), a cloud gaming app with the same name."
+    },
+    {
+      "name": "Bluedot", "category": "notetaker",
+      "appNames": ["Bluedot"],
+      "confidence": "name-only", "prompt": "auto-record",
+      "evidence": "https://www.bluedothq.com/blog/bluedot-2-1"
+    },
+    {
+      "name": "Alter", "category": "notetaker",
+      "appNames": ["Alter"],
+      "confidence": "name-only", "prompt": "auto-record",
+      "evidence": "https://alterhq.com/download"
+    },
+    {
+      "name": "Littlebird", "category": "notetaker",
+      "bundleIDs": ["com.genos.littlebird"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "evidence": "https://formulae.brew.sh/api/cask/littlebird.json"
+    },
+    {
+      "name": "Altar AI", "category": "notetaker",
+      "bundleIDs": ["com.electron.altar-app"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "evidence": "https://formulae.brew.sh/api/cask/altar-ai.json"
+    },
+    {
+      "name": "MeetingRecorder", "category": "notetaker",
+      "bundleIDs": ["com.meetingrecorder.app"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "evidence": "https://formulae.brew.sh/api/cask/meetingrecorder.json"
+    },
+    {
+      "name": "MeetMic", "category": "notetaker",
+      "bundleIDs": ["ltd.iwt.QuickWhisper"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "evidence": "https://formulae.brew.sh/api/cask/meetmic.json",
+      "note": "Formerly QuickWhisper. The bundle ID kept the old name."
+    },
+    {
+      "name": "RiverScript", "category": "notetaker",
+      "bundleIDs": ["com.riverscript.desktop"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "evidence": "https://formulae.brew.sh/api/cask/riverscript.json"
+    },
+    {
+      "name": "Detto", "category": "notetaker",
+      "bundleIDs": ["io.gremble.detto"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "evidence": "https://github.com/Gremble-io/Detto/blob/HEAD/Detto/Sources/Detto/Info.plist"
+    },
+    { "name": "Noted", "category": "notetaker", "bundleIDs": ["com.digitalworkroom.noted.mac"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://itunes.apple.com/search?term=noted&entity=macSoftware" },
+    { "name": "Capy", "category": "notetaker", "bundleIDs": ["com.digitalworkroom.capybara"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://itunes.apple.com/search?term=capy&entity=macSoftware" },
+    { "name": "Narada", "category": "notetaker", "bundleIDs": ["stepanok.com.Meetings-Recorder"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://itunes.apple.com/search?term=minutes+meeting&entity=macSoftware" },
+    { "name": "Meetly", "category": "notetaker", "bundleIDs": ["com.edgeai.meetly"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://itunes.apple.com/search?term=meetly&entity=macSoftware" },
+    { "name": "MeetNotes AI", "category": "notetaker", "bundleIDs": ["com.samsonice.meetnotes"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://itunes.apple.com/search?term=meetnotes&entity=macSoftware" },
+    { "name": "Meeting Intelligence", "category": "notetaker", "bundleIDs": ["com.michaelcosmi.MeetingIntelligence"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://itunes.apple.com/search?term=meeting+intelligence&entity=macSoftware" },
+    { "name": "Tablo", "category": "notetaker", "bundleIDs": ["Ideanology.Transcriblo"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://itunes.apple.com/search?term=tablo&entity=macSoftware" },
+    { "name": "MinuteForge", "category": "notetaker", "bundleIDs": ["com.danielw.MinuteForge"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://itunes.apple.com/search?term=minuteforge&entity=macSoftware" },
+    { "name": "NoteAI", "category": "notetaker", "bundleIDs": ["com.stefrasoft.noteai"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://itunes.apple.com/search?term=noteai&entity=macSoftware" },
+    { "name": "ScreenApp", "category": "notetaker", "bundleIDs": ["io.screenapp.app"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://itunes.apple.com/search?term=screenapp&entity=macSoftware" },
+    { "name": "Omi", "category": "notetaker", "bundleIDs": ["com.friend-app-with-wearable.ios12"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://itunes.apple.com/search?term=omi&entity=macSoftware" },
+    {
+      "name": "Otter", "category": "notetaker",
+      "bundleIDs": ["com.otterai.desktop", "ai.otter.otter"], "appNames": ["Otter", "Otter.ai"],
+      "confidence": "inferred", "prompt": "unknown",
+      "offSwitch": "Otter › Desktop App Settings › Meeting Detection › Off",
+      "evidence": "https://appcatalog.cloud/apps/otter"
+    },
+    {
+      "name": "Fireflies", "category": "notetaker",
+      "appNames": ["Fireflies", "Fireflies.ai"],
+      "confidence": "name-only", "prompt": "window",
+      "keywords": ["take notes", "invite notetaker"],
+      "neverPress": ["Take Notes", "Invite Notetaker"],
+      "offSwitch": "Fireflies › Settings › Notifications › Notify when a meeting is detected",
+      "evidence": "https://guide.fireflies.ai/articles/1208704416-getting-started-with-the-fireflies-desktop-app",
+      "note": "Invite Notetaker sends a bot into the call, so MeetingMute never presses it."
+    },
+    {
+      "name": "tl;dv", "category": "notetaker",
+      "bundleIDs": ["io.tldv.desktop"], "appNames": ["tldv", "tl;dv"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "neverPress": ["Start Recording", "Record instant meeting"],
+      "offSwitch": "tl;dv › Settings › Desktop App › Live meeting notifications",
+      "evidence": "https://github.com/apfelq/mdm-pkg-creator/blob/1a10bc15251196b402e2b24f80c5ed682106fca7/apps-examples/tldv.yaml"
+    },
+    {
+      "name": "Fathom", "category": "notetaker",
+      "bundleIDs": ["video.fathom.electron"], "appNames": ["Fathom"],
+      "confidence": "confirmed", "prompt": "window",
+      "neverPress": ["Audio & Video", "Transcript Only", "Audio Only", "Skip & Start Recording Now"],
+      "offSwitch": "Fathom › Capture Off for the meeting",
+      "evidence": "https://github.com/autopkg/dataJAR-recipes/blob/master/Fathom/Fathom.download.recipe"
+    },
+    {
+      "name": "Supernormal", "category": "notetaker",
+      "appNames": ["Supernormal"],
+      "confidence": "name-only", "prompt": "window",
+      "neverPress": ["Start capture", "Join"],
+      "offSwitch": "Supernormal › Settings › Preferences › Capture Meetings Automatically",
+      "evidence": "https://help.supernormal.com/en/articles/11801221-how-do-i-capture-a-meeting",
+      "note": "Starts capture after a 15 second countdown."
+    },
+    { "name": "Attention", "category": "notetaker", "appNames": ["Attention"], "confidence": "name-only", "prompt": "unknown", "evidence": "https://docs.attention.com/core-features/desktop-app" },
+    { "name": "Jiminny", "category": "notetaker", "appNames": ["Jiminny"], "confidence": "name-only", "prompt": "window", "neverPress": ["Start Recording"], "evidence": "https://help.jiminny.com/en/articles/15373740-invisible-recording-with-the-jiminny-desktop-app" },
+    { "name": "MeetGeek", "category": "notetaker", "appNames": ["MeetGeek"], "confidence": "name-only", "prompt": "unknown", "evidence": "https://support.meetgeek.ai/en/articles/13745672-meetgeek-desktop-app-quickstart-guide" },
+    { "name": "Notta", "category": "notetaker", "appNames": ["Notta"], "confidence": "name-only", "prompt": "unknown", "evidence": "https://www.notta.ai" },
+    { "name": "Grain", "category": "notetaker", "appNames": ["Grain"], "confidence": "name-only", "prompt": "auto-record", "evidence": "https://support.grain.com/en/articles/12022918-desktop-capture" },
+    { "name": "Fyxer", "category": "notetaker", "appNames": ["Fyxer", "Fyxer Notetaker"], "confidence": "name-only", "prompt": "window", "evidence": "https://support.fyxer.com/en/articles/13544508-install-the-notetaker-desktop-app-and-record-your-first-meeting" },
+    { "name": "Laxis", "category": "notetaker", "appNames": ["Laxis"], "confidence": "name-only", "prompt": "unknown", "evidence": "https://help.laxis.com/ai-meeting-assistant/desktop/" },
+    { "name": "Sybill", "category": "notetaker", "appNames": ["Sybill"], "confidence": "name-only", "prompt": "auto-record", "evidence": "https://help.sybill.ai/en/articles/16761658-getting-started-with-sybill-your-first-week" },
+    { "name": "Read AI", "category": "notetaker", "appNames": ["Read AI"], "confidence": "name-only", "prompt": "unknown", "evidence": "https://www.read.ai/desktop" },
+    { "name": "Claap", "category": "notetaker", "appNames": ["Claap"], "confidence": "name-only", "prompt": "unknown", "evidence": "https://help.claap.io/en/articles/15588967-recording-and-transcribing-your-meetings-on-the-desktop-app-mac" },
+    { "name": "Clari Copilot", "category": "notetaker", "appNames": ["Clari Copilot", "Clari-Copilot"], "confidence": "name-only", "prompt": "unknown", "evidence": "https://github.com/Installomator/Installomator/blob/main/fragments/labels/claricopilot.sh" },
+    { "name": "Avoma", "category": "notetaker", "appNames": ["Avoma"], "confidence": "name-only", "prompt": "unknown", "evidence": "https://www.avoma.com/download" },
+    {
+      "name": "ChatGPT", "category": "assistant",
+      "bundleIDs": ["com.openai.codex", "com.openai.chat"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "evidence": "https://formulae.brew.sh/api/cask/chatgpt.json",
+      "note": "The current ChatGPT app is com.openai.codex. ChatGPT Classic is com.openai.chat."
+    },
+    {
+      "name": "Wispr Flow", "category": "dictation",
+      "bundleIDs": ["com.electron.wispr-flow"],
+      "confidence": "confirmed", "prompt": "window",
+      "keywords": ["meeting detected", "transcribe this meeting", "notes for this meeting", "notetaker"],
+      "press": ["Not now", "Not this one", "No thanks", "Maybe later"],
+      "neverPress": ["Start Notetaker", "Join only", "Turn off"],
+      "offSwitch": "Wispr Flow › Settings › Notetaker › Automatically detect any call",
+      "evidence": "https://formulae.brew.sh/api/cask/wispr-flow.json",
+      "note": "Can start the Notetaker after a 10 second countdown. After many dismissals Flow may offer to turn detection off."
+    },
+    {
+      "name": "MacWhisper", "category": "dictation",
+      "bundleIDs": ["com.goodsnooze.MacWhisper"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "keywords": ["meeting detected"],
+      "neverPress": ["Record"],
+      "offSwitch": "MacWhisper › Settings › Record Meetings › Automatic Meeting Notifications",
+      "evidence": "https://formulae.brew.sh/api/cask/macwhisper.json"
+    },
+    {
+      "name": "Vibe", "category": "dictation",
+      "bundleIDs": ["github.com.thewh1teagle.vibe"],
+      "confidence": "confirmed", "prompt": "window",
+      "keywords": ["meeting detected", "record this meeting"],
+      "press": ["Not now"], "neverPress": ["Record"],
+      "offSwitch": "Vibe › Settings › Meeting detection",
+      "evidence": "https://github.com/thewh1teagle/vibe/blob/main/desktop/src-tauri/tauri.conf.json"
+    },
+    {
+      "name": "OpenWhispr", "category": "dictation",
+      "bundleIDs": ["com.gizmolabs.openwhispr"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "keywords": ["in a meeting", "meeting is starting", "meeting is underway"],
+      "neverPress": ["Join & transcribe"],
+      "offSwitch": "OpenWhispr › Settings › App › Preferences › Notifications › Meeting detection",
+      "evidence": "https://formulae.brew.sh/api/cask/openwhispr.json"
+    },
+    {
+      "name": "Muesli", "category": "dictation",
+      "bundleIDs": ["com.muesli.app"],
+      "confidence": "confirmed", "prompt": "window",
+      "neverPress": ["Join & Transcribe", "Join Only", "Transcribe Only"],
+      "evidence": "https://formulae.brew.sh/api/cask/muesli.json"
+    },
+    { "name": "GhostPepper", "category": "dictation", "bundleIDs": ["com.github.matthartman.ghostpepper"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://github.com/matthartman/ghost-pepper/blob/HEAD/GhostPepper/Info.plist" },
+    { "name": "MacParakeet", "category": "dictation", "bundleIDs": ["com.macparakeet.MacParakeet"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://formulae.brew.sh/api/cask/macparakeet.json" },
+    { "name": "Monologue", "category": "dictation", "bundleIDs": ["com.zeitalabs.jottleai"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://formulae.brew.sh/api/cask/monologue.json", "note": "The bundle ID kept the old Jottle AI name." },
+    { "name": "Amical", "category": "dictation", "bundleIDs": ["com.amical.desktop"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://formulae.brew.sh/api/cask/amical.json" },
+    {
+      "name": "Zight", "category": "recorder",
+      "bundleIDs": ["com.linebreak.CloudAppMacOSX"],
+      "confidence": "confirmed", "prompt": "unknown",
+      "keywords": ["meeting detected"],
+      "offSwitch": "Zight › Preferences › General › Auto-detect meetings",
+      "evidence": "https://formulae.brew.sh/api/cask/zight.json",
+      "note": "Formerly CloudApp. The bundle ID kept the old name."
+    },
+    {
+      "name": "MeetingBar", "category": "calendar",
+      "bundleIDs": ["leits.MeetingBar"],
+      "confidence": "confirmed", "prompt": "banner", "fullScreen": true,
+      "keywords": ["event starts", "event has started"],
+      "press": ["Dismiss"], "neverPress": ["Join"],
+      "offSwitch": "MeetingBar › Preferences › Notifications",
+      "evidence": "https://github.com/leits/MeetingBar/blob/master/MeetingBar/Notifications/NotificationScheduler.swift"
+    },
+    { "name": "Dato", "category": "calendar", "bundleIDs": ["com.sindresorhus.Dato"], "confidence": "confirmed", "prompt": "fullscreen", "fullScreen": true, "neverPress": ["Join"], "evidence": "https://apps.apple.com/us/app/dato/id1470584107" },
+    { "name": "Meeting Reminder In Your Face", "category": "calendar", "bundleIDs": ["com.bluebanana-software.inyourface"], "confidence": "confirmed", "prompt": "fullscreen", "fullScreen": true, "neverPress": ["Join"], "evidence": "https://apps.apple.com/us/app/meeting-reminder-in-your-face/id1476964367" },
+    {
+      "name": "Notion Calendar", "category": "calendar",
+      "bundleIDs": ["com.cron.electron"],
+      "confidence": "confirmed", "prompt": "window",
+      "neverPress": ["Join conferencing", "Join", "Email participants"],
+      "offSwitch": "Notion Calendar › Settings › Notifications",
+      "evidence": "https://formulae.brew.sh/api/cask/notion-calendar.json",
+      "note": "Formerly Cron. The bundle ID kept the Cron name."
+    },
+    { "name": "Fantastical", "category": "calendar", "bundleIDs": ["com.flexibits.fantastical2.mac", "85C27NK92C.com.flexibits.fantastical2.mac.helper"], "confidence": "confirmed", "prompt": "banner", "neverPress": ["Join"], "offSwitch": "System Settings › Notifications › Fantastical", "evidence": "https://formulae.brew.sh/api/cask/fantastical.json" },
+    { "name": "Morgen", "category": "calendar", "bundleIDs": ["com.todesktop.210203cqcj00tw1"], "confidence": "confirmed", "prompt": "window", "neverPress": ["Join Now"], "evidence": "https://formulae.brew.sh/api/cask/morgen.json" },
+    { "name": "Akiflow", "category": "calendar", "bundleIDs": ["com.akiflow.akiflow"], "confidence": "confirmed", "prompt": "window", "offSwitch": "Akiflow › Settings › Notifications", "evidence": "https://formulae.brew.sh/api/cask/akiflow.json" },
+    { "name": "Dot", "category": "calendar", "bundleIDs": ["com.dot.app"], "confidence": "confirmed", "prompt": "window", "fullScreen": true, "neverPress": ["Join"], "offSwitch": "Dot › Preferences › Meeting Reminders", "evidence": "https://formulae.brew.sh/api/cask/dot.json" },
+    { "name": "MinMaxCal", "category": "calendar", "bundleIDs": ["com.mikemcquaid.MinMaxCal"], "confidence": "confirmed", "prompt": "fullscreen", "fullScreen": true, "evidence": "https://github.com/MikeMcQuaid/MinMaxCal/blob/main/project.yml" },
+    { "name": "BigReminder", "category": "calendar", "bundleIDs": ["app.bigreminder"], "confidence": "confirmed", "prompt": "fullscreen", "fullScreen": true, "neverPress": ["Join"], "evidence": "https://apps.apple.com/app/id6757824417" },
+    { "name": "Slapss", "category": "calendar", "bundleIDs": ["com.cancetin.slapss"], "confidence": "confirmed", "prompt": "fullscreen", "fullScreen": true, "neverPress": ["Join"], "evidence": "https://apps.apple.com/us/app/id6767488326" },
+    { "name": "Calerto", "category": "calendar", "bundleIDs": ["com.Calarm"], "confidence": "confirmed", "prompt": "fullscreen", "fullScreen": true, "evidence": "https://apps.apple.com/us/app/id6747410132" },
+    { "name": "Next - Meeting Alerts", "category": "calendar", "bundleIDs": ["tools.emily.next"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://apps.apple.com/app/id6758521669" },
+    { "name": "Remind", "category": "calendar", "bundleIDs": ["com.christopherdoyle.remind"], "confidence": "confirmed", "prompt": "fullscreen", "fullScreen": true, "evidence": "https://apps.apple.com/app/id6787806895" },
+    { "name": "Meeting Hero", "category": "calendar", "bundleIDs": ["com.cole-labs.meeting-hero.release"], "confidence": "confirmed", "prompt": "window", "evidence": "https://apps.apple.com/app/id1519894533" },
+    { "name": "Quick Join", "category": "calendar", "bundleIDs": ["com.wegenerlabs.Quick-Join"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://itunes.apple.com/lookup?id=1511437420" },
+    { "name": "JustJoin", "category": "calendar", "bundleIDs": ["com.grc.JustJoin"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://apps.apple.com/search?term=justjoin" },
+    { "name": "Soonie", "category": "calendar", "bundleIDs": ["co.numberfive.Slicings"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://apps.apple.com/search?term=soonie" },
+    { "name": "Next Meeting", "category": "calendar", "bundleIDs": ["com.nspindel.nextmeeting.osx"], "confidence": "confirmed", "prompt": "unknown", "evidence": "https://itunes.apple.com/lookup?id=1017470484" },
+    { "name": "Rewind", "category": "notetaker", "bundleIDs": ["com.memoryvault.MemoryVault"], "confidence": "confirmed", "prompt": "unknown", "status": "discontinued", "evidence": "https://formulae.brew.sh/api/cask/rewind.json", "note": "Capture stopped on 19 Dec 2025." },
+    { "name": "Limitless", "category": "notetaker", "bundleIDs": ["ai.limitless.desktop"], "confidence": "confirmed", "prompt": "unknown", "status": "discontinued", "evidence": "https://formulae.brew.sh/api/cask/limitless.json" },
+    { "name": "Superpowered", "category": "notetaker", "bundleIDs": ["com.todesktop.2203083ko7eiitd"], "confidence": "inferred", "prompt": "unknown", "status": "discontinued", "evidence": "https://download.todesktop.com/2203083ko7eiitd/td-latest-mac.json" }
+  ],
+  "quietMicrophoneApps": {
+    "about": "Apps that use the microphone but never prompt at call start. MeetingMute never suggests them as notetakers.",
+    "bundleIDs": [
+      "com.superduper.superwhisper", "com.seewillow.WillowMac", "com.electron.aqua-voice", "com.prakashjoshipax.VoiceInk",
+      "app.spokenly", "now.typeless.desktop", "com.hyperwhisper.hyperwhisper", "com.FluidApp.app", "com.pais.handy",
+      "com.kitlangton.Hex", "nz.owo.koe", "com.typewhisper.mac", "com.bradenwong.whispering", "com.frigade.Yap",
+      "ru.starmel.OpenSuperWhisper", "com.input0", "com.input0.app", "app.saega.app", "com.talonvoice.Talon",
+      "com.cliffweitzman.speechifymacagent", "com.kamban.elephas", "com.dictationdaddy.app", "com.chidiwilliams.buzz",
+      "xyz.block.buzz.app", "com.wlly.janome.AudioTranscribe", "com.autosubs", "com.subtitle.studio", "com.voicenotes.app",
+      "com.rrd.ideashell.global", "com.rrd.ideashell", "com.loom.desktop", "so.cap.desktop", "com.timpler.screenstudio",
+      "pl.maketheweb.cleanshotx", "tv.tella.Tella", "com.descript.beachcube", "RVS-Riverside.fm-Mac",
+      "com.rogueamoeba.audiohijack", "com.obsproject.obs-studio", "com.anthropic.claudefordesktop",
+      "com.microsoft.m365copilot", "com.microsoft.copilot-mac", "com.google.GeminiMacOS", "ai.perplexity.macv3",
+      "tv.medal.highlight", "com.raycast.macos", "com.mutedeck.mac", "com.reincubate.macos.cam", "com.elgato.CameraHub"
+    ]
+  }
+}

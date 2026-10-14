@@ -103,6 +103,6 @@ struct GlassChip: View {
             .padding(.horizontal, compact ? 8 : 11)
             .padding(.vertical, compact ? 4 : 6)
             .brandGlass(in: Capsule(), tint: tint)
-            .shadow(color: glow ?? .clear, radius: 10)
+            .shadow(color: glow ?? .clear, radius: glow == nil ? 0 : 10)
     }
 }

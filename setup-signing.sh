@@ -29,7 +29,8 @@ EOF
 /usr/bin/env openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
     -keyout "$TMP/key.pem" -out "$TMP/cert.pem" -config "$TMP/cert.cnf" 2>/dev/null
 
-PASS="meetingmute"
+# Throwaway password for the temporary .p12; the file is deleted on exit.
+PASS="$(openssl rand -hex 16)"
 legacy=""
 openssl version | grep -q "^OpenSSL 3" && legacy="-legacy"
 openssl pkcs12 -export $legacy -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \

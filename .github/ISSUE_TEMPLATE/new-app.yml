@@ -1,0 +1,29 @@
+name: Add an app
+description: A notetaker, dictation app or meeting reminder that MeetingMute should know.
+labels: [new app]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: App name
+    validations:
+      required: true
+  - type: input
+    id: bundle
+    attributes:
+      label: Bundle ID
+      description: 'Run: mdls -name kMDItemCFBundleIdentifier "/Applications/App Name.app"'
+  - type: input
+    id: link
+    attributes:
+      label: Website or download link
+  - type: textarea
+    id: prompt
+    attributes:
+      label: What does its prompt look like?
+      description: The text and button labels when a call starts, and whether it's a notification banner or its own window. A screenshot is ideal.
+  - type: input
+    id: off
+    attributes:
+      label: Where can the prompt be turned off inside the app?
+      placeholder: Settings › Notifications › Meeting detection

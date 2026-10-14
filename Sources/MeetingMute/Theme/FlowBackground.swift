@@ -1,16 +1,18 @@
 import SwiftUI
 
 /// Slow, looping brand-gradient background. MeshGradient on macOS 15+, LinearGradient on 14.
-/// Freezes on a still frame when Reduce Motion is on.
+/// Freezes on a still frame when Reduce Motion is on or the window is inactive.
 struct FlowBackground: View {
     /// Seconds for one full loop.
     var period: Double = 24
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Paused while the window is in the background: nobody watches it, and the GPU rests.
+    @Environment(\.controlActiveState) private var activeState
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { context in
+        TimelineView(.animation(minimumInterval: 1 / 20, paused: reduceMotion || activeState == .inactive)) { context in
             let phase = reduceMotion ? 0.15 : context.date.timeIntervalSinceReferenceDate
                 .truncatingRemainder(dividingBy: period) / period
             gradient(phase: phase * 2 * .pi)

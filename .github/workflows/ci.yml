@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Runs on Blacksmith runners (the Blacksmith app is installed on the meetstream-ai org).
+# The app itself needs macOS to build; these jobs cover the registry and all of the logic in
+# MeetingMuteCore, which builds on Linux. Build the app locally with ./build.sh.
+jobs:
+  registry:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generated files match registry/apps.json
+        run: python3 scripts/gen_registry.py --check
+
+  core:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    container: swift:6.1-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Core checks
+        run: swift run CoreChecks
